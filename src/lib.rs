@@ -1,4 +1,4 @@
-//! # Wave
+//! # WireWave
 //!  
 //! Use [Wave API](https://wireway.ch) Wave API to fetch music by search query
  
