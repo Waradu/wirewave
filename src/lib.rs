@@ -1,7 +1,7 @@
 //! # WireWave
 //!  
-//! Use [Wave API](https://wireway.ch) Wave API to fetch music by search query
- 
+//! Use the [Wave API](https://wireway.ch) to fetch music by search query and retrieve thumbnails.
+
 use reqwest::blocking::{Client, Response as ReqwestResponse};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -11,17 +11,17 @@ use std::fmt;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WaveMusic {
     /// The title of the music item.
-    title: Option<String>,
+    pub title: Option<String>,
     /// The name of the uploader of the music item.
     #[serde(rename = "uploaderName")]
-    uploader_name: Option<String>,
+    pub uploader_name: Option<String>,
     /// The URL of the uploader's profile.
     #[serde(rename = "uploaderUrl")]
-    uploader_url: Option<String>,
+    pub uploader_url: Option<String>,
     /// The duration of the music item in seconds.
-    duration: Option<u32>,
+    pub duration: Option<u32>,
     /// The unique identifier of the music item.
-    id: Option<String>,
+    pub id: Option<String>,
 }
 
 /// Represents the response structure from the Wave API.
@@ -52,8 +52,8 @@ impl WaveMusic {
     /// # Example
     ///
     /// ```
-    /// let music_items = WaveMusic::new("example search term".to_string());
-    /// for item in music_items.unwrap() {
+    /// let music_items = WaveMusic::new("example search term".to_string()).unwrap();
+    /// for item in music_items {
     ///     println!("{}", item);
     /// }
     /// ```
@@ -67,6 +67,46 @@ impl WaveMusic {
         let response = Self::fetch_data(&client, &url)?;
         let response_json: ApiResponse = Self::parse_response(response)?;
         Ok(response_json.items)
+    }
+
+    /// Fetches the thumbnail image data for the music item.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use std::io::copy;
+    /// use std::path::Path;
+    /// use wirewave::*;
+    ///
+    /// let music_items = WaveMusic::new("example search term".to_string()).unwrap();
+    /// if let Some(item) = music_items.first() {
+    ///     let mut thumbnail_response = item.thumbnail().unwrap();
+    ///     let name = format!("{}.png", item.id.as_ref().unwrap());
+    ///     let path = Path::new(&name);
+    ///     let mut file = File::create(&path).unwrap();
+    ///     copy(&mut thumbnail_response, &mut file).unwrap();
+    ///     println!("Image fetched and saved to {:?}", path);
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the music item does not have an ID or if the HTTP request fails.
+    pub fn thumbnail(&self) -> Result<reqwest::blocking::Response, Box<dyn Error>> {
+        // Ensure the music item has an ID
+        let id = self.id.as_ref().ok_or("Music item does not have an ID")?;
+        // Construct the thumbnail URL
+        let url = format!("https://api.wireway.ch/wave/thumbnail/{}", id);
+
+        let response = reqwest::blocking::get(&url)?;
+
+        // Check for response errors
+        if response.status().is_success() {
+            Ok(response)
+        } else {
+            Err(format!("Failed to fetch thumbnail: HTTP {}", response.status()).into())
+        }
     }
 
     /// Fetches data from the specified URL using the given HTTP client.
@@ -99,10 +139,7 @@ impl WaveMusic {
     /// This function will return an error if the response body cannot be parsed as JSON.
     fn parse_response(response: ReqwestResponse) -> Result<ApiResponse, Box<dyn Error>> {
         let text = response.text()?;
-        let response_json: ApiResponse = serde_json::from_str(&text).map_err(|e| {
-            eprintln!("Failed to parse JSON: {}", e);
-            Box::new(e) as Box<dyn Error>
-        })?;
+        let response_json: ApiResponse = serde_json::from_str(&text)?;
         Ok(response_json)
     }
 }
